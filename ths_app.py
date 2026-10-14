@@ -130,8 +130,17 @@ def _read_holdings_from_text(vtext: str, cash_line: str = "") -> tuple[dict, flo
     return holdings, cash, asset
 
 
-def get_portfolio(e) -> tuple[dict, float | None, float | None]:
-    """读取模拟盘持仓/资金。回到底部『交易』→ 模拟账户。失败返回 (ledger提示, None, None)。"""
+def get_portfolio(e, save_to_db: bool = True) -> tuple[dict, float | None, float | None]:
+    """读取模拟盘持仓/资金。
+    路径: 底部『交易』→ 模拟账户/模拟炒股 → 『持仓』
+    1. 截图并以时间标准命名: YYYYMMDD_HHMMSS_portfolio.png
+    2. 多模态识图 (vision.recognize_portfolio) + UI文本解析双保险
+    3. 识别内容(现有股票、持仓数量、手中资金数量)存储到 MySQL 数据库中
+    """
+    import db_mysql
+    import vision
+
+    _dismiss_dialogs(e, max_rounds=2)
     if not _tap_anchor(e, "trade_tab", fallbacks=("交易",)):
         print("[ths] 找不到『交易』入口")
         return {}, None, None
@@ -142,14 +151,81 @@ def get_portfolio(e) -> tuple[dict, float | None, float | None]:
     time.sleep(3)
     _tap_anchor(e, "positions_tab", fallbacks=("持仓",))
     time.sleep(3)
+
+    # 1. 截图 (时间命名)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    shot_path = os.path.join(config.SHOT_DIR, f"{ts}_portfolio.png")
+    e.screencap(shot_path)
+    print(f"[ths] 持仓页面截图已保存: {shot_path}")
+
+    # 2. 识别持仓: 优先大模型多模态识图，UI文本解析兜底补充
+    holdings: dict[str, dict] = {}
+    cash = asset = None
+
+    # 方式一: 大模型图像识别
+    rec = {}
+    try:
+        rec = vision.recognize_portfolio(shot_path)
+    except Exception as ex:
+        print(f"[ths] 大模型持仓识图调用异常: {ex}")
+
+    if rec.get("ok"):
+        cash = rec.get("cash")
+        asset = rec.get("total_asset")
+        for s in rec.get("stocks") or []:
+            code = s.get("code")
+            if code:
+                holdings[code] = {
+                    "code": code,
+                    "name": s.get("name", ""),
+                    "qty": int(s.get("qty", 0)),
+                    "available": int(s.get("available", s.get("qty", 0))),
+                    "cost": s.get("cost"),
+                    "price": s.get("price"),
+                    "market_value": s.get("market_value"),
+                }
+        print(f"[ths] 视觉大模型持仓识别成功: 股票 {len(holdings)} 只, 资金 {cash}, 资产 {asset}")
+
+    # 方式二: UI层级文本解析兜底与核对
     vtext = e.visible_text()
-    hold, cash, asset = _read_holdings_from_text(vtext)
-    if not hold and cash is None:
-        print("[ths] 未能从当前页解析出持仓(需校准 selectors)。当前页文本:")
+    ui_hold, ui_cash, ui_asset = _read_holdings_from_text(vtext)
+
+    # 若图像未能提取出可用资金，采用UI文本结果
+    if cash is None and ui_cash is not None:
+        cash = ui_cash
+    if asset is None and ui_asset is not None:
+        asset = ui_asset
+    # 合并UI文本提取出的股票 (若模型漏提)
+    for code, h in ui_hold.items():
+        if code not in holdings:
+            holdings[code] = h
+        else:
+            if not holdings[code].get("name") and h.get("name"):
+                holdings[code]["name"] = h["name"]
+
+    if not holdings and cash is None:
+        print("[ths] 未能从当前页解析出持仓或资金。当前页文本:")
         print("  ", vtext[:300])
         return {}, None, None
-    print(f"[ths] 持仓 {len(hold)} 只,可用资金 {cash} 总资产 {asset}")
-    return hold, cash, asset
+
+    print(f"[ths] 持仓识别汇总: 现有股票 {len(holdings)} 只, 手中可用资金 {cash}, 总资产 {asset}")
+
+    # 3. 存储到 MySQL 数据库
+    if save_to_db:
+        try:
+            stocks_list = list(holdings.values())
+            bid = db_mysql.save_portfolio(
+                cash=cash or 0.0,
+                total_asset=asset,
+                stocks=stocks_list,
+                shot_path=shot_path,
+                source="vision"
+            )
+            print(f"[ths] 持仓识别结果已存入 MySQL (balance_id={bid})")
+        except Exception as ex:
+            print(f"[ths] 持仓结果存入 MySQL 失败: {ex}")
+
+    return holdings, cash, asset
 
 
 # ---------- 下单(同花顺模拟盘:交易 → 模拟账户控制台填单) ----------
@@ -385,7 +461,8 @@ def place_order(e, side: str, code: str, name: str, shares: int,
     outcome = _settle_after_submit(e)
     # 7) 截图存档;必要时交模型备援判读
     from vision import order_succeeded
-    shot = os.path.join(config.SHOT_DIR, f"order_{side}_{code}_{time.strftime('%H%M%S')}.png")
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    shot = os.path.join(config.SHOT_DIR, f"{ts}_order_{side}_{code}.png")
     e.screencap(shot)
     if outcome == "unknown":
         verdict = order_succeeded(shot, side)

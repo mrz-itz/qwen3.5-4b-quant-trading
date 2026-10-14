@@ -39,6 +39,14 @@ def ask_image(user: str, image_path: str, system: str | None = None,
     return j.get("text", "")
 
 
+def switch_model(model_name: str) -> dict:
+    """向运行中的 model_server 发送热切换模型请求。"""
+    try:
+        return _post("/switch_model", {"model": model_name}, timeout=120)
+    except Exception as e:
+        return {"ok": False, "error": repr(e)}
+
+
 if __name__ == "__main__":
     import sys
     sys.stdout.write("health: ")

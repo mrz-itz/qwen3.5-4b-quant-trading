@@ -11,10 +11,15 @@ ENV/
 
 # Large Model Weights (>100MB, not suitable for GitHub)
 qwen3.5-4B/
+models/*
+!models/.gitkeep
+packaged_models/
 *.safetensors
 *.bin
 *.pt
 *.onnx
+*.incomplete
+*.lock
 
 # Runtime generated data & logs
 data/*

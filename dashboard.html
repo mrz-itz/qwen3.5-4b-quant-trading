@@ -99,12 +99,17 @@
   <!-- 状态卡 -->
   <div class="cards">
     <div class="card">
-      <h3>模型服务(Qwen3.5-4B)</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">模型服务</h3>
+        <select id="mSelect" style="background:var(--card2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12px;max-width:130px" title="切换活跃模型"></select>
+      </div>
       <div class="row"><span class="big"><span class="dot" id="mDot"></span><span id="mState">检测中</span></span></div>
       <div class="dim" id="mDetail">--</div>
+      <div class="dim" id="mModelInfo" style="margin-top:2px;color:var(--acc)">模型: --</div>
       <div class="btns" style="margin-top:8px">
         <button id="mStart" class="primary small">启动</button>
         <button id="mStop" class="small">停止</button>
+        <button id="mPackBtn" class="small" title="从本地目录或下载的 Hugging Face 目录打包模型">📦 打包模型</button>
       </div>
     </div>
     <div class="card">
@@ -124,6 +129,16 @@
       <div class="btns" style="margin-top:8px">
         <button id="eStart" class="primary small">启动模拟器</button>
         <button id="eStop" class="small">关闭</button>
+      </div>
+    </div>
+    <div class="card" style="border-color:var(--acc)">
+      <h3>持仓与资金 (MySQL)</h3>
+      <div class="row"><span class="big"><span id="pCash">--</span></span><span class="dim">元 可用</span></div>
+      <div class="dim">总资产: <b id="pAsset">--</b> 元 · 持仓 <b id="pCount">-</b> 只</div>
+      <div class="dim" id="pTime">记录: --</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="pRefresh" class="primary small" title="在雷电模拟器同花顺中截屏识图并存入MySQL">📸 识别持仓</button>
+        <button id="pClean" class="small warn" title="清理超1个月的历史截图、识别记录与日志">🧹 启动清理</button>
       </div>
     </div>
     <div class="card">
@@ -168,6 +183,21 @@
       <div class="hint" style="margin-top:6px">日志文件: data\logs\loop_live.log · data\logs\model_server.out</div>
     </section>
   </div>
+
+  <!-- 现有股票持仓识别明细(MySQL) -->
+  <section style="margin-top:14px">
+    <div class="secbar"><span>现有股票持仓明细 (MySQL)</span>
+      <span class="meta" id="portfolioMeta">数据来源: 视觉识别快照</span>
+    </div>
+    <div class="tableWrap" style="max-height:220px;overflow:auto"><table>
+      <thead><tr>
+        <th>股票代码</th><th>股票名称</th><th>持仓数量</th><th>可用数量</th>
+        <th>成本价</th><th>当前价</th><th>持仓市值</th>
+      </tr></thead>
+      <tbody id="portfolioBody"></tbody>
+    </table></div>
+    <div id="portfolioEmpty" class="empty" style="display:none">暂无持仓记录 (可点击上方卡片「📸 识别持仓」进行识别)</div>
+  </section>
 
   <!-- 下半整行:交易流水(独立常驻区块,不与股票池互斥) -->
   <section>
@@ -215,7 +245,7 @@ async function refreshStatus(){
     const s=await api('/api/status');
     $('clock').textContent=s.now;
     $('pollInfo').textContent='已更新 '+(s.now||'').slice(11);   // 活心跳:每轮成功即刷新时间
-    renderModel(s.model); renderLoop(s.loop); renderEmu(s.emu);
+    renderModel(s.model, s.models, s.active_model); renderLoop(s.loop); renderEmu(s.emu);
     renderTop(s); renderRisk(s); renderKill(s.kill); renderStocks(s.stocks);
   }catch(e){
     $('clock').textContent='状态连接失败 '+e.message;
@@ -223,12 +253,30 @@ async function refreshStatus(){
   }
 }
 function dot(state){return '<span class="dot '+(state?'on':'off')+'"></span>';}
-function renderModel(m){
+function renderModel(m, models, activeModel){
   $('mDot').className='dot '+(m.running?'on':'off');
   $('mState').textContent=m.running?(m.loaded?'运行中':'启动中…'):'已停止';
   const d=m.loaded?`cuda 已加载 · ${m.device||''}`:(m.running?'(服务在,模型加载中)':(m.error?'异常':'未启动'));
   $('mDetail').textContent=`${d} · pid ${(m.pids||[]).join(',')||'-'}`;
   $('mStart').disabled=m.running; $('mStop').disabled=!m.running;
+
+  if(activeModel){
+    const caps = (activeModel.capabilities||[]).join('/');
+    $('mModelInfo').textContent = `当前: ${activeModel.name} (${caps||'text'} · ${activeModel.size_mb||0}MB)`;
+  }
+  const sel = $('mSelect');
+  if(models && models.length > 0){
+    const activeName = (activeModel && activeModel.name) || '';
+    sel.innerHTML = models.map(mod => `<option value="${esc(mod.name)}"${mod.name===activeName?' selected':''}>${esc(mod.name)}</option>`).join('');
+    sel.onchange = e => {
+      const target = e.target.value;
+      if(confirm(`确认将系统活跃模型切换为: ${target} ?`)){
+        control('model_switch', {name: target});
+      } else {
+        sel.value = activeName;
+      }
+    };
+  }
 }
 function renderLoop(l){
   $('lDot').className='dot '+(l.running?'on':'off');
@@ -253,6 +301,38 @@ function renderTop(s){
   $('pollS').textContent=s.poll_seconds;
   $('tHold').textContent=s.holdings;
   $('tStk').textContent=(s.stocks||[]).length;
+  renderPortfolio(s.portfolio);
+  renderPortfolioTable(s.portfolio);
+}
+function renderPortfolio(p){
+  if(!p){
+    $('pCash').textContent='--';
+    $('pAsset').textContent='--';
+    $('pCount').textContent='0';
+    $('pTime').textContent='暂无识别记录';
+    return;
+  }
+  $('pCash').textContent=Number(p.cash||0).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  $('pAsset').textContent=p.total_asset?Number(p.total_asset).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}):'--';
+  $('pCount').textContent=(p.stocks||[]).length;
+  $('pTime').textContent=(p.record_time||'--')+' ('+(p.source||'vision')+')';
+}
+function renderPortfolioTable(p){
+  const tb=$('portfolioBody'); tb.innerHTML='';
+  const stocks=(p && p.stocks)?p.stocks:[];
+  $('portfolioEmpty').style.display=(stocks.length===0)?'':'none';
+  if(!p) return;
+  const shotFile=p.screenshot_path?p.screenshot_path.split(/[\\/]/).pop():'无';
+  $('portfolioMeta').textContent=`快照时间: ${p.record_time||'--'} · 来源: ${p.source||'vision'} · 关联截图: ${shotFile}`;
+  stocks.forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${esc(s.stock_code)}</td><td><b>${esc(s.stock_name)}</b></td>
+      <td>${Number(s.shares||0).toLocaleString()}</td><td>${Number(s.available_shares||0).toLocaleString()}</td>
+      <td>${s.cost_price!=null?Number(s.cost_price).toFixed(2):'--'}</td>
+      <td>${s.current_price!=null?Number(s.current_price).toFixed(2):'--'}</td>
+      <td>${s.market_value!=null?Number(s.market_value).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}):'--'}</td>`;
+    tb.appendChild(tr);
+  });
 }
 function dayStr(n){return (n>0)?n+'单':'不限';}
 function renderRisk(s){
@@ -325,11 +405,20 @@ async function control(action, mode){
 }
 $('mStart').onclick=()=>control('model_start');
 $('mStop').onclick=()=>control('model_stop');
+$('mPackBtn').onclick=()=>{
+  const src=prompt("请输入从 Hugging Face 下载的模型目录绝对路径:\n(例如: C:\\Users\\Mr.ZHUANG\\Desktop\\AI短剧\\model\\MiniMax-H3-main)");
+  if(src && src.trim()){
+    const name=prompt("请输入打包后的模型名称(留空默认使用文件夹名):","");
+    control('model_pack',{source:src.trim(),name:(name&&name.trim())?name.trim():null});
+  }
+};
 $('lLive').onclick=()=>control('loop_start','live');
 $('lDry').onclick=()=>control('loop_start','dry');
 $('lStop').onclick=()=>control('loop_stop');
 $('eStart').onclick=()=>control('emu_start');
 $('eStop').onclick=()=>control('emu_stop');
+$('pRefresh').onclick=()=>control('portfolio_refresh');
+$('pClean').onclick=()=>control('system_clean');
 $('killSwitch').onchange=e=>{ if(!confirm(e.target.checked?'开启急停 → 盯盘暂停下单?':'关闭急停 → 恢复正常交易?')){e.target.checked=!e.target.checked;return;} control(e.target.checked?'kill_on':'kill_off'); };
 $('reloadBtn').onclick=()=>{   // 仅重载页面,不停任何服务;带时间戳强制重新拉取,绕过 WebView2 缓存
   const b=$('reloadBtn');

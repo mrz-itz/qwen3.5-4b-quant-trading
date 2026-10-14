@@ -149,6 +149,14 @@ def run_cycle(dry: bool, holdings: dict[str, dict], cash: float | None,
 
 # ---------- 循环 ----------
 def monitor(dry: bool, force: bool = False, interval: int | None = None) -> None:
+    # 启动时执行系统自动清理(以再次启动时间为基准, 清理超过1个月的截图、识别数据与日志)
+    if getattr(config, "AUTO_CLEANUP_ON_START", True):
+        try:
+            import cleaner
+            cleaner.cleanup_system()
+        except Exception as ce:
+            print(f"[loop] 启动自动清理异常: {ce}")
+
     if not dry:
         from emulator import Emulator
         e = Emulator()
@@ -174,8 +182,33 @@ def monitor(dry: bool, force: bool = False, interval: int | None = None) -> None
                 print("[loop] 检测到急停文件 STOP,暂停下单(删除该文件可恢复)。本轮回合只分析不执行。")
                 time.sleep(30)
                 continue
+
+            # 持仓与资金获取
             holdings = ledger.positions_from_ledger()
             cash, asset = None, None
+            if not dry:
+                try:
+                    from ths_app import get_portfolio
+                    from emulator import Emulator
+                    e = Emulator()
+                    if e.connect_adb(quiet=True):
+                        app_hold, app_cash, app_asset = get_portfolio(e, save_to_db=True)
+                        if app_hold or app_cash is not None:
+                            holdings = app_hold
+                            cash = app_cash
+                            asset = app_asset
+                except Exception as ex:
+                    print(f"[loop] 读取模拟盘持仓异常: {ex}, 使用账本持仓")
+            else:
+                # dry 模式下将账本推算持仓与资金同步记录到 MySQL
+                try:
+                    import db_mysql
+                    stocks_list = list(holdings.values())
+                    cash_est = ledger.cash_estimate()
+                    db_mysql.save_portfolio(cash=cash_est, total_asset=None, stocks=stocks_list, source="ledger")
+                except Exception:
+                    pass
+
             run_cycle(dry, holdings, cash, asset, executor=_make_executor(dry))
             print(f"[loop] 完成一轮,{time.strftime('%H:%M:%S')},睡 {interval}s ...")
             time.sleep(interval)

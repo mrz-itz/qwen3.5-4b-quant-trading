@@ -110,6 +110,13 @@ def main():
     if not _acquire_single_instance():
         _log("检测到已有 App 实例在运行,本次启动退出(避免重复开窗)")
         return
+    if getattr(config, "AUTO_CLEANUP_ON_START", True):
+        try:
+            import cleaner
+            cleaner.cleanup_system()
+            _log("启动系统自动清理完成")
+        except Exception as e:
+            _log(f"启动自动清理异常: {e!r}")
     server, reused = _ensure_service()
     _log("打开桌面窗口 ...")
     try:

@@ -69,6 +69,17 @@ def _status() -> dict:
     today_decisions = _count_today(exec_status="decided")
 
     holdings = ledger.positions_from_ledger()
+    portfolio_data = None
+    try:
+        import db_mysql
+        portfolio_data = db_mysql.get_latest_portfolio()
+    except Exception:
+        pass
+
+    import model_manager
+    active_m = model_manager.get_active_model()
+    models_list = model_manager.list_models()
+
     st = {
         "now": time.strftime("%Y-%m-%d %H:%M:%S", now),
         "weekday": time.strftime("%A", now),
@@ -80,11 +91,15 @@ def _status() -> dict:
                   "loaded": bool(model["health"].get("model_loaded")),
                   "cuda": bool(model["health"].get("cuda")),
                   "device": model["health"].get("device"),
-                  "error": model["health"].get("error")},
+                  "error": model["health"].get("error"),
+                  "active": active_m.get("name")},
+        "models": models_list,
+        "active_model": active_m,
         "loop": {"running": loop["running"], "pids": loop["pids"], "mode": loop["mode"]},
         "emu": emu,
         "today": {"orders": today_orders, "decisions": today_decisions},
         "holdings": len(holdings),
+        "portfolio": portfolio_data,
         "stocks": stocks_loader.current_list(),
         "risk": {"max_orders_day": config.MAX_ORDERS_PER_DAY,
                  "cash_pct": config.DEFAULT_CASH_PERCENT,
@@ -175,6 +190,14 @@ class _H(BaseHTTPRequestHandler):
                 return self._serve_html()
             if u.path == "/api/status":
                 return self._send(_status())
+            if u.path == "/api/portfolio":
+                import db_mysql
+                p = db_mysql.get_latest_portfolio()
+                return self._send({"ok": True, "portfolio": p})
+            if u.path == "/api/models":
+                import model_manager
+                return self._send({"ok": True, "models": model_manager.list_models(),
+                                   "active": model_manager.get_active_model()})
             if u.path == "/api/trades":
                 import ledger
                 q = parse_qs(u.query)
@@ -204,7 +227,18 @@ class _H(BaseHTTPRequestHandler):
                     _cache["val"] = None                 # 强制下次刷新状态
                     for _e in _slow.values():            # 及各项慢探测缓存
                         _e["val"] = None
-                r = control.dispatch(req.get("action", ""), mode=req.get("mode"))
+                r = control.dispatch(req.get("action", ""), mode=req.get("mode"), **req)
+                return self._send(r)
+            if u.path == "/api/models":
+                import model_manager
+                op = req.get("op")
+                if op == "switch":
+                    r = model_manager.switch_model(req.get("name") or "")
+                elif op == "pack":
+                    r = model_manager.pack_model(req.get("source") or "", model_name=req.get("name"),
+                                                 copy_files=bool(req.get("copy")), description=req.get("desc") or "")
+                else:
+                    return self._send({"ok": False, "msg": f"未知 op {op}"}, 400)
                 return self._send(r)
             if u.path == "/api/stocks":
                 import stocks_loader
@@ -223,6 +257,12 @@ class _H(BaseHTTPRequestHandler):
 
 
 def make_server(host: str | None = None, port: int | None = None) -> ThreadingHTTPServer:
+    if getattr(config, "AUTO_CLEANUP_ON_START", True):
+        try:
+            import cleaner
+            cleaner.cleanup_system()
+        except Exception as e:
+            print(f"[dashboard] 启动清理异常: {e}")
     return ThreadingHTTPServer((host or config.DASHBOARD_HOST, port or config.DASHBOARD_PORT), _H)
 
 

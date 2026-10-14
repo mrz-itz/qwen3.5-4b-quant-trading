@@ -7,11 +7,42 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---- 关键路径 ----
-MODEL_DIR   = os.path.join(BASE_DIR, "qwen3.5-4B")      # Qwen3.5-4B 模型目录
-DOC_PATH    = os.path.join(BASE_DIR, "股票信息.doc")      # 股票代码/名称来源
 DATA_DIR    = os.path.join(BASE_DIR, "data")             # 运行期产物(截图/日志/账本)
+MODELS_DIR  = os.path.join(BASE_DIR, "models")            # 打包模型专属存储目录
+ACTIVE_MODEL_FILE = os.path.join(DATA_DIR, "active_model.json") # 当前激活模型配置文件
+
+
+def get_active_model_dir() -> str:
+    """获取当前激活模型的实际目录路径。优先读 active_model.json, 未配置时使用 qwen3.5-4B。"""
+    if os.path.exists(ACTIVE_MODEL_FILE):
+        try:
+            import json
+            with open(ACTIVE_MODEL_FILE, "r", encoding="utf-8") as f:
+                info = json.load(f)
+                p = info.get("path")
+                if p and os.path.isdir(p):
+                    return p
+                name = info.get("name")
+                if name:
+                    cand = os.path.join(MODELS_DIR, name)
+                    if os.path.isdir(cand):
+                        return cand
+        except Exception:
+            pass
+    # 默认兜底: 优先 models/qwen3.5-4B, 其次根目录 qwen3.5-4B
+    cand_models = os.path.join(MODELS_DIR, "qwen3.5-4B")
+    if os.path.isdir(cand_models):
+        return cand_models
+    return os.path.join(BASE_DIR, "qwen3.5-4B")
+
+
+MODEL_DIR   = get_active_model_dir()                      # 当前激活模型目录
+DOC_PATH    = os.path.join(BASE_DIR, "股票信息.doc")      # 股票代码/名称来源
 KILL_FILE   = os.path.join(DATA_DIR, "STOP")             # 急停:存在该文件则暂停下单
 CACHE_FILE  = os.path.join(DATA_DIR, "quote_cache.json") # 行情短缓存
+TRADES_CSV  = os.path.join(DATA_DIR, "trades.csv")       # 交易流水
+EQUITY_JSONL= os.path.join(DATA_DIR, "equity.jsonl")     # 资产快照流水
+STATUS_JSON = os.path.join(DATA_DIR, "status.json")       # 状态快照
 
 # ---- 模型服务 ----
 MODEL_HOST = "127.0.0.1"
@@ -86,8 +117,19 @@ SHOT_DIR = os.path.join(DATA_DIR, "shots")
 # 发往模型的截图最长边(缩放用,控制 token/显存)
 VISION_MAX_EDGE = 1024
 
+# ---- MySQL 数据库配置 ----
+MYSQL_HOST     = os.environ.get("MYSQL_HOST", "127.0.0.1")
+MYSQL_PORT     = int(os.environ.get("MYSQL_PORT", "3306"))
+MYSQL_USER     = os.environ.get("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "111111")
+MYSQL_DB       = os.environ.get("MYSQL_DB", "quant_trade")
+
+# ---- 清理与留存配置(系统再次启动时超1个月删除) ----
+CLEANUP_RETENTION_DAYS = int(os.environ.get("CLEANUP_RETENTION_DAYS", "30")) # 默认30天(1个月)
+AUTO_CLEANUP_ON_START  = True                                               # 系统启动时自动触发清理
+
 # ---- 让日志落盘 UTF-8 ----
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 
-for _d in (DATA_DIR, SHOT_DIR, LOG_DIR):
+for _d in (DATA_DIR, SHOT_DIR, LOG_DIR, MODELS_DIR):
     os.makedirs(_d, exist_ok=True)

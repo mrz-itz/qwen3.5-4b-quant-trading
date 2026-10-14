@@ -35,36 +35,55 @@
 
 ## 三、使用
 ```bash
-.venv/Scripts/python.exe run.py env              # 环境自检(GPU/模型/接口/股票池)
+.venv/Scripts/python.exe run.py env              # 环境自检(GPU/模型/接口/股票池/MySQL)
 .venv/Scripts/python.exe run.py serve            # 前台起模型服务(可另开窗口)
+.venv/Scripts/python.exe run.py web              # 启动 Web 可视化控制台与监控面板 (http://localhost:5000)
 .venv/Scripts/python.exe run.py emu start        # 启动雷电模拟器
 .venv/Scripts/python.exe run.py probe            # 校准:导出当前屏 UI 元素/截图
+.venv/Scripts/python.exe run.py portfolio        # 查看 MySQL 最新持仓快照 (现有股票/持仓数量/资金)
+.venv/Scripts/python.exe run.py portfolio --emu  # 连接模拟器同花顺进行多模态持仓识别并存储到 MySQL
+.venv/Scripts/python.exe run.py clean --days 30  # 手动清理超过1个月的历史截图、识别记录与日志
 .venv/Scripts/python.exe run.py once --dry       # 只分析一轮,打印拟下单,不下单(推荐先跑)
 .venv/Scripts/python.exe run.py loop --dry       # 全自动盯盘(不真实下单)
 .venv/Scripts/python.exe run.py loop --live      # 全自动盯盘 + 模拟盘真实下单
+
+# 模型打包与快速切换
+.venv/Scripts/python.exe run.py model list       # 查看所有已打包的模型及当前激活模型
+.venv/Scripts/python.exe run.py model current    # 查看当前正在使用的模型详情
+.venv/Scripts/python.exe run.py model switch <name> # 快速热切换当前量化模型
+.venv/Scripts/python.exe run.py model pack <hf_path> --name <model_name> # 从 Hugging Face 下载目录快速打包模型
 ```
 - 参数 `--force` 无视交易时段立即跑(周末演示用)。
 - 盯盘默认只在 A 股时段(09:30–11:30 / 13:00–15:00,周一至五)动作。
+- **启动自动清理**: 每次启动系统(盯盘/控制台/一次性分析)时，自动以当前启动时间为基准，清理超过 1 个月的历史截图、MySQL 图片识别及过期日志。
+- **模型打包与零冗余切换**:
+  - 从 Hugging Face 下载的模型文件（如 MiniMax-H3、Qwen、DeepSeek 等），通过 `model pack` 打包存入专属 `models/<name>` 文件夹。
+  - 在同盘符下默认利用 NTFS 硬链接技术，实现秒级打包且零额外磁盘冗余。
+  - 自动提取模型架构配置并生成标准化 `model_meta.json`，支持在 Web 控制台或命令行秒级热切换。
 
 ## 四、急停与风控
 - 单笔 ≤ 可用资金 10%;单只 ≤ 资产 20%;每日最多 8 笔;每分钟最多 1 笔。
 - **急停**:新建文件 `data\STOP` 后立即暂停下单(删除即恢复)。
 - 所有决策/成交记在 `data\trades.csv`;资产快照 `data\equity.jsonl`、`data\status.json`。
+- 持仓识别与资金历史持久化存储于 **MySQL** (`quant_trade` 库)。
 - 修改风控参数:`config.py`。
 
-## 五、目录结构
+## 五、目录结构与存储优化
 ```
 config.py / stocks_loader.py   配置 & 解析股票信息.doc
+db_mysql.py                    MySQL 数据库管理 (资金快照、股票持仓明细、图片识别日志)
+cleaner.py                     系统启动清理逻辑 (超过1个月的历史图片/识别记录/日志)
 market_data.py                 东财实时行情 + 腾讯日K + 本地指标
 model_server.py                常驻模型服务(/analyze_text /analyze_image)
 model_client.py                模型服务 HTTP 客户端
 strategy.py                    组装 prompt、解析并规整模型 JSON
-vision.py                      截图送模型读图确认
+vision.py                      持仓识图/弹窗核验多模态分析，自动落库 MySQL
 emulator.py                    雷电/adb 驱动(截图、点按、uiautomator)
-ths_app.py                     同花顺页驱动(搜索/持仓/下单)
+ths_app.py                     同花顺页驱动(持仓识别、时间命名截图、下单)
 selectors.json                 同花顺 UI 锚点(校准后填写)
-main_loop.py / run.py          盯盘调度与命令行
-data/                          运行产物(日志/截图/账本)
+main_loop.py / run.py          盯盘调度与命令行 (启动自动触发清理)
+data/shots/                    截图目录 (按 YYYYMMDD_HHMMSS_* 时间命名)
+data/logs/                     运行日志 (自动保留近 1 个月内容)
 ```
 
 ## 六、校准(同花顺 UI 会随版本变化)

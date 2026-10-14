@@ -206,6 +206,34 @@ def kill_flag(on: bool) -> dict:
             else "急停已关闭:恢复正常盯盘", "kill": os.path.exists(config.KILL_FILE)}
 
 
+def portfolio_refresh() -> dict:
+    """在模拟器中主动触发一次持仓与资金识别, 并落库 MySQL。"""
+    try:
+        from emulator import Emulator
+        from ths_app import get_portfolio
+        e = Emulator()
+        if not e.connect_adb(quiet=True):
+            return {"ok": False, "msg": "模拟器未连接, 请先启动雷电模拟器并进入同花顺持仓页"}
+        hold, cash, asset = get_portfolio(e, save_to_db=True)
+        return {"ok": True, "msg": f"持仓识别完成: 现有股票 {len(hold)} 只, 可用资金 {cash:,.2f} 元",
+                "cash": cash, "total_asset": asset, "stocks_count": len(hold)}
+    except Exception as ex:
+        return {"ok": False, "msg": f"持仓识别异常: {ex!r}"}
+
+
+def system_clean() -> dict:
+    """手动执行启动清理逻辑: 超过1个月的历史图片、MySQL识别记录和日志。"""
+    try:
+        import cleaner
+        res = cleaner.cleanup_system()
+        shots_cnt = res.get("shots", {}).get("deleted_count", 0)
+        logs_lines = res.get("logs", {}).get("removed_lines", 0)
+        return {"ok": True, "msg": f"清理完成: 删除了 {shots_cnt} 张过期图片, {logs_lines} 行过期日志",
+                "detail": res}
+    except Exception as ex:
+        return {"ok": False, "msg": f"系统清理异常: {ex!r}"}
+
+
 def dispatch(action: str, **kw) -> dict:
     """dashboard POST /api/control 的统一入口。"""
     act = (action or "").strip().lower()
@@ -225,6 +253,17 @@ def dispatch(action: str, **kw) -> dict:
         return kill_flag(True)
     if act == "kill_off":
         return kill_flag(False)
+    if act == "portfolio_refresh":
+        return portfolio_refresh()
+    if act == "system_clean":
+        return system_clean()
+    if act == "model_switch":
+        import model_manager
+        return model_manager.switch_model(kw.get("name") or kw.get("model") or "")
+    if act == "model_pack":
+        import model_manager
+        return model_manager.pack_model(kw.get("source") or "", model_name=kw.get("name"),
+                                          copy_files=bool(kw.get("copy")), description=kw.get("desc") or "")
     return {"ok": False, "msg": f"未知动作: {action}"}
 
 
