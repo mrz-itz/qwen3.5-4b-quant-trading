@@ -1,0 +1,4 @@
+# 项目依赖(CUDA torch 单独装,见 README)
+# 系统已具备(经 Anaconda 基座透传):transformers>=5.3, pywin32, pillow
+# 需在 venv 内补齐(很小):
+accelerate>=1.0

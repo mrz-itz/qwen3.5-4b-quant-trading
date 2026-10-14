@@ -1,0 +1,12 @@
+{
+  "_说明": "同花顺 UI 锚点。by=text 表示按节点文本匹配,by=desc 按 content-desc 匹配。用 python run.py probe 把当前屏元素导出后校对/填写。",
+  "search_entry": { "by": "text", "text": "搜索" },
+  "trade_tab": { "by": "text", "text": "交易" },
+  "sim_entry": { "by": "text", "text": "模拟" },
+  "positions_tab": { "by": "text", "text": "持仓" },
+  "buy_btn": { "by": "text", "text": "买" },
+  "sell_btn": { "by": "text", "text": "卖" },
+  "qty_field": { "by": "text", "text": "数量" },
+  "confirm_buy": { "by": "text", "text": "买入" },
+  "confirm_sell": { "by": "text", "text": "卖出" }
+}

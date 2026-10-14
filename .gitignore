@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Large Model Weights (>100MB, not suitable for GitHub)
+qwen3.5-4B/
+*.safetensors
+*.bin
+*.pt
+*.onnx
+
+# Runtime generated data & logs
+data/*
+!data/stocks.json
+!data/.gitkeep
+
+# IDE & Editor
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

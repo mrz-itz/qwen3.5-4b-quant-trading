@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大模型量化交易 · 控制台</title>
+<meta id="build" name="build" content="__BUILD__">
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --card2:#1c2129; --line:#2a3038;
+    --txt:#e6edf3; --dim:#8b949e; --acc:#58a6ff; --up:#f85149; --down:#3fb950;
+    --warn:#d29922; --ok:#3fb950; --chip:#21262d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.5 "Microsoft YaHei",system-ui,sans-serif}
+  header{position:sticky;top:0;background:#0b0f14ee;backdrop-filter:blur(6px);
+         border-bottom:1px solid var(--line);padding:10px 18px;display:flex;
+         align-items:center;gap:14px;z-index:20}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  header .sub{color:var(--dim);font-size:12px}
+  .wrap{padding:14px 18px 60px;max-width:1180px;margin:0 auto}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .card h3{margin:0 0 8px;font-size:12px;color:var(--dim);font-weight:600;letter-spacing:.5px}
+  .row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  .on{background:var(--ok);box-shadow:0 0 8px #3fb95088}
+  .off{background:#57606a}
+  .big{font-size:22px;font-weight:700}
+  .dim{color:var(--dim);font-size:12px}
+  .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:12px;
+       background:var(--chip);border:1px solid var(--line)}
+  .tag.buy{color:var(--up);border-color:#f8514966}
+  .tag.sell{color:var(--down);border-color:#3fb95066}
+  .tag.hold{color:var(--dim)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  button{font:inherit;border-radius:8px;border:1px solid var(--line);cursor:pointer;
+         padding:7px 13px;background:var(--card2);color:var(--txt);transition:.12s}
+  button:hover:not(:disabled){border-color:var(--acc)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  button.danger{background:#d73a4940;border-color:#d73a49;color:#ffa198}
+  button.warn{background:#d2992240;border-color:#d29922;color:#e3b341}
+  button.small{padding:3px 9px;font-size:12px}
+  .danger-zone button{margin-bottom:4px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:14px;overflow:hidden}
+  .secbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+          padding:9px 14px;border-bottom:1px solid var(--line);background:var(--card2);
+          font-weight:600;font-size:13px}
+  .secbar .meta{font-weight:400;font-size:12px;color:var(--dim)}
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:var(--card2)}
+  .tabs button{border:none;border-radius:0;background:transparent;padding:10px 16px;color:var(--dim)}
+  .tabs button.active{color:var(--txt);box-shadow:inset 0 -2px 0 var(--acc)}
+  .body{padding:6px 0 0}
+  pre.log{height:420px;overflow:auto;margin:0;padding:10px 14px;white-space:pre-wrap;
+          word-break:break-all;font:12px/1.55 Consolas,monospace;color:#c9d1d9}
+  pre.log .t-line{display:block}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{color:var(--dim);font-weight:600;position:sticky;top:0;background:var(--card2)}
+  td.dim,.dim{color:var(--dim)}
+  form{display:flex;gap:8px;padding:10px 14px;flex-wrap:wrap;align-items:center}
+  input{font:inherit;background:var(--card2);border:1px solid var(--line);color:var(--txt);
+        border-radius:8px;padding:7px 10px}
+  input:focus{outline:none;border-color:var(--acc)}
+  .stockcode{width:110px} .stockname{width:150px}
+  .empty{color:var(--dim);padding:16px;text-align:center}
+  #toast{position:fixed;top:14px;right:18px;z-index:50;display:flex;flex-direction:column;gap:8px}
+  .toast{background:#21262d;border:1px solid var(--line);border-left:3px solid var(--acc);
+         border-radius:8px;padding:9px 14px;max-width:360px;box-shadow:0 6px 20px #0009;
+         animation:in .18s ease}
+  .toast.err{border-left-color:#f85149}.toast.warn{border-left-color:#d29922}
+  @keyframes in{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+  .bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .hint{color:var(--dim);font-size:11px;margin:0 14px 6px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .switch{position:relative;display:inline-block;width:42px;height:22px;vertical-align:-6px}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:#30363d;border-radius:22px;cursor:pointer;transition:.15s}
+  .slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;
+                 background:#fff;border-radius:50%;transition:.15s}
+  .switch input:checked+.slider{background:#da3633}
+  .switch input:checked+.slider:before{transform:translateX(20px)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ 大模型量化交易 · 同花顺模拟盘</h1>
+  <span class="sub" id="clock">--</span>
+  <span class="tag" id="sessionTag">时段 --</span>
+  <div style="flex:1"></div>
+  <span class="sub" id="pollInfo">自检中…</span>
+  <button class="small" id="reloadBtn" title="仅重载页面,不影响盯盘/模型/模拟器">⟳ 刷新</button>
+</header>
+<div class="wrap">
+
+  <!-- 状态卡 -->
+  <div class="cards">
+    <div class="card">
+      <h3>模型服务(Qwen3.5-4B)</h3>
+      <div class="row"><span class="big"><span class="dot" id="mDot"></span><span id="mState">检测中</span></span></div>
+      <div class="dim" id="mDetail">--</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="mStart" class="primary small">启动</button>
+        <button id="mStop" class="small">停止</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>盯盘进程(策略)</h3>
+      <div class="row"><span class="big"><span class="dot" id="lDot"></span><span id="lState">检测中</span></span></div>
+      <div class="dim" id="lMode">--</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="lLive" class="danger small">启动 · live真实下单</button>
+        <button id="lDry" class="small">启动 · dry演练</button>
+        <button id="lStop" class="warn small">停止盯盘</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>雷电模拟器 / 同花顺</h3>
+      <div class="row"><span class="big"><span class="dot" id="eDot"></span><span id="eState">检测中</span></span></div>
+      <div class="dim" id="eDetail">--</div>
+      <div class="btns" style="margin-top:8px">
+        <button id="eStart" class="primary small">启动模拟器</button>
+        <button id="eStop" class="small">关闭</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>今日统计</h3>
+      <div class="row"><span class="big"><span id="tOrders">-</span></span><span class="dim"> 单 · 日上限 <span id="tMax">-</span></span></div>
+      <div class="dim">今日决策 <b id="tDec">-</b> 次 · 模型调用间隔 <span id="pollS">-</span>s</div>
+      <div class="dim">持仓 <b id="tHold">-</b> 只 · 股票池 <b id="tStk">-</b> 只</div>
+    </div>
+    <div class="card" style="border-color:var(--warn)">
+      <h3>急停开关</h3>
+      <label class="switch"><input type="checkbox" id="killSwitch"><span class="slider"></span></label>
+      <span class="dim" id="killTxt">创建 data\STOP 即暂停下单</span>
+    </div>
+  </div>
+
+  <!-- 上半两栏(同屏可见):左 股票池 / 右 盯盘·模型日志 -->
+  <div class="grid2">
+    <section style="margin-top:0;display:flex;flex-direction:column;min-height:0">
+      <div class="secbar"><span>股票池</span>
+        <span class="meta">火力:单笔≤可用<b id="cashPct">-</b>% · 单只≤资产<b id="posPct">-</b>% · 日<b id="dayMax">-</b></span>
+      </div>
+      <form id="addForm" autocomplete="off">
+        <input id="newCode" class="stockcode" placeholder="6位代码,如 600522" maxlength="6" inputmode="numeric">
+        <input id="newName" class="stockname" placeholder="名称(可留空自动补)">
+        <button class="primary" type="submit">＋ 添加</button>
+        <span class="hint">改完立即生效,盯盘下一轮即按新池运行</span>
+      </form>
+      <div class="tableWrap" style="flex:1;min-height:0;overflow:auto"><table>
+        <thead><tr><th>#</th><th>代码</th><th>名称</th><th style="text-align:right">操作</th></tr></thead>
+        <tbody id="stockBody"></tbody>
+      </table></div>
+      <div id="stockEmpty" class="empty" style="display:none">股票池为空 —— 添加要操作的股票</div>
+    </section>
+
+    <section style="margin-top:0">
+      <div class="tabs" id="logTabs">
+        <button class="active" data-pane="logLoop">盯盘日志</button>
+        <button data-pane="logModel">模型日志</button>
+      </div>
+      <div id="pane-logLoop"><pre class="log" id="logLoop"></pre></div>
+      <div id="pane-logModel" style="display:none"><pre class="log" id="logModel"></pre></div>
+      <div class="hint" style="margin-top:6px">日志文件: data\logs\loop_live.log · data\logs\model_server.out</div>
+    </section>
+  </div>
+
+  <!-- 下半整行:交易流水(独立常驻区块,不与股票池互斥) -->
+  <section>
+    <div class="secbar"><span>交易流水</span>
+      <span class="meta">最近 <b id="tradeCount">-</b> 笔 · 自动刷新</span>
+    </div>
+    <div class="tableWrap" style="max-height:440px;overflow:auto"><table>
+      <thead><tr>
+        <th>时间</th><th>代码</th><th>名称</th><th>动作</th><th>数量</th>
+        <th>价格</th><th>金额</th><th>置信</th><th>状态</th><th>理由</th>
+      </tr></thead>
+      <tbody id="tradeBody"></tbody>
+    </table></div>
+    <div id="tradeEmpty" class="empty" style="display:none">暂无流水</div>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const state={after:{loop:0,model:0}, activeLog:'logLoop'};
+
+/* ---------- 工具 ---------- */
+function toast(msg, cls){
+  const el=document.createElement('div');
+  el.className='toast '+(cls||''); el.textContent=msg;
+  $('toast').appendChild(el);
+  setTimeout(()=>el.remove(),4500);
+}
+// 页内兜底:任何 JS 运行错误/未捕获 Promise 都要看得见,不静默冻结界面
+window.addEventListener('error', ev=>{ try{ toast('页面错误: '+(ev.message||'unknown'), 'err'); }catch(_){} });
+window.addEventListener('unhandledrejection', ev=>{
+  try{ toast('请求未完成: '+(ev.reason && (ev.reason.message||ev.reason) || 'unknown'), 'err'); }catch(_){} });
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function api(path,opt){
+  const r=await fetch(path,opt);
+  return r.json();
+}
+function actBtn(on){document.querySelectorAll('button').forEach(b=>b.disabled=on);}
+
+/* ---------- 状态刷新 ---------- */
+async function refreshStatus(){
+  try{
+    const s=await api('/api/status');
+    $('clock').textContent=s.now;
+    $('pollInfo').textContent='已更新 '+(s.now||'').slice(11);   // 活心跳:每轮成功即刷新时间
+    renderModel(s.model); renderLoop(s.loop); renderEmu(s.emu);
+    renderTop(s); renderRisk(s); renderKill(s.kill); renderStocks(s.stocks);
+  }catch(e){
+    $('clock').textContent='状态连接失败 '+e.message;
+    $('pollInfo').textContent='连接失败,自动重试中';
+  }
+}
+function dot(state){return '<span class="dot '+(state?'on':'off')+'"></span>';}
+function renderModel(m){
+  $('mDot').className='dot '+(m.running?'on':'off');
+  $('mState').textContent=m.running?(m.loaded?'运行中':'启动中…'):'已停止';
+  const d=m.loaded?`cuda 已加载 · ${m.device||''}`:(m.running?'(服务在,模型加载中)':(m.error?'异常':'未启动'));
+  $('mDetail').textContent=`${d} · pid ${(m.pids||[]).join(',')||'-'}`;
+  $('mStart').disabled=m.running; $('mStop').disabled=!m.running;
+}
+function renderLoop(l){
+  $('lDot').className='dot '+(l.running?'on':'off');
+  $('lState').textContent=l.running?'盯盘中':'已停止';
+  const modeTxt={live:'<span class="tag buy">live · 真实下单</span>',
+                 dry:'<span class="tag">dry · 演练</span>',unknown:'<span class="tag">未知</span>'}[l.mode||'unknown']||'';
+  $('lMode').innerHTML=l.running?('模式 '+modeTxt+' · pid '+((l.pids||[]).join(',')||'-')):'未运行';
+  $('lLive').disabled=l.running; $('lDry').disabled=l.running; $('lStop').disabled=!l.running;
+}
+function renderEmu(e){
+  $('eDot').className='dot '+(e.adb?'on':'off');
+  $('eState').textContent=e.adb?'在线':'离线';
+  $('eDetail').textContent=(e.screen?('屏幕 '+e.screen.join('x')):'')+(e.error?' · '+esc(e.error):'');
+}
+function renderTop(s){
+  const inS=s.in_session;
+  $('sessionTag').textContent=inS?'开市中':'休市'+(s.sessions?(' '+s.sessions.map(x=>x.join('–')).join(' / ')):'');
+  $('sessionTag').style.borderColor=inS?'var(--down)':'var(--line)';
+  $('tOrders').textContent=s.today.orders;
+  $('tMax').textContent=dayStr(s.risk.max_orders_day);
+  $('tDec').textContent=s.today.decisions;
+  $('pollS').textContent=s.poll_seconds;
+  $('tHold').textContent=s.holdings;
+  $('tStk').textContent=(s.stocks||[]).length;
+}
+function dayStr(n){return (n>0)?n+'单':'不限';}
+function renderRisk(s){
+  $('cashPct').textContent=Math.round((s.risk.cash_pct||0)*100);
+  $('posPct').textContent=Math.round((s.risk.pos_pct||0)*100);
+  $('dayMax').textContent=dayStr(s.risk.max_orders_day);
+}
+function renderKill(k){
+  $('killSwitch').checked=k;
+  $('killTxt').textContent=k?'急停已开启 · 盯盘暂停下单':'点击急停 = 创建 data\\STOP';
+}
+function renderStocks(list){
+  const tb=$('stockBody'); tb.innerHTML='';
+  $('stockEmpty').style.display=(!list||list.length===0)?'':'none';
+  (list||[]).forEach((s,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="dim">${i+1}</td><td>${esc(s.code)}</td><td>${esc(s.name)}</td>
+      <td style="text-align:right"><button class="small danger" data-del="${esc(s.code)}">删除</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delStock(b.dataset.del));
+}
+function renderTrades(rows){
+  const tb=$('tradeBody'); tb.innerHTML='';
+  $('tradeCount').textContent=(rows||[]).length;
+  $('tradeEmpty').style.display=(!rows||rows.length===0)?'':'none';
+  (rows||[]).forEach(r=>{
+    const tr=document.createElement('tr');
+    const act=String(r.action||'').toLowerCase();
+    tr.innerHTML=`<td class="dim">${esc(r.ts)}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td>
+      <td><span class="tag ${act}">${esc(r.action)}</span></td><td>${esc(r.shares)}</td>
+      <td>${esc(r.price)}</td><td>${esc(r.amount||'')}</td><td class="dim">${esc(r.confidence)}</td>
+      <td class="dim">${esc(r.exec_status||'')}</td>
+      <td class="dim" style="white-space:normal;max-width:360px">${esc(r.reason)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ---------- 日志增量 ---------- */
+let lastLoopSize=0,lastModelSize=0;
+async function refreshLog(name){
+  const el=$(name); const file=name==='logLoop'?'loop':'model';
+  const st=await api(`/api/logs?file=${file}&after=${state.after[file]}`);
+  if(st.text){ el.insertAdjacentHTML('beforeend', st.text.split('\n').map(l=>{
+      l=l.trim();
+      if(!l)return '';
+      let cls='';
+      if(l.includes('[DRY]'))cls='tag'; else if(l.includes('buy')||l.includes('买入'))cls='';
+      return `<span class="t-line">${esc(l)}</span>`;
+    }).join(''));
+  }
+  state.after[file]=st.after;
+  // 盯盘日志有新行时联动刷新流水,下单/卖出即时可见
+  if(file==='loop' && st.text && st.text.trim()) refreshTrades();
+  // 自动滚底(贴近底部才滚)
+  const near=el.scrollTop+el.clientHeight>=el.scrollHeight-80;
+  if(near)el.scrollTop=el.scrollHeight;
+  if(el.scrollHeight===0){}
+}
+
+/* ---------- 控制动作 ---------- */
+async function control(action, mode){
+  try{ actBtn(true);
+    const r=await api('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action, mode})});
+    toast(r.msg||'已执行', r.ok?'':'err');
+    setTimeout(refreshStatus,1200);
+  }catch(e){ toast('操作失败: '+e.message,'err'); }
+  finally{ actBtn(false); }
+}
+$('mStart').onclick=()=>control('model_start');
+$('mStop').onclick=()=>control('model_stop');
+$('lLive').onclick=()=>control('loop_start','live');
+$('lDry').onclick=()=>control('loop_start','dry');
+$('lStop').onclick=()=>control('loop_stop');
+$('eStart').onclick=()=>control('emu_start');
+$('eStop').onclick=()=>control('emu_stop');
+$('killSwitch').onchange=e=>{ if(!confirm(e.target.checked?'开启急停 → 盯盘暂停下单?':'关闭急停 → 恢复正常交易?')){e.target.checked=!e.target.checked;return;} control(e.target.checked?'kill_on':'kill_off'); };
+$('reloadBtn').onclick=()=>{   // 仅重载页面,不停任何服务;带时间戳强制重新拉取,绕过 WebView2 缓存
+  const b=$('reloadBtn');
+  b.textContent='⟳ 刷新中…'; b.disabled=true;
+  setTimeout(()=>{ location.href=(location.href.split('?')[0])+'?t='+Date.now(); }, 80);
+};
+
+/* ---------- 股票增删 ---------- */
+$('addForm').onsubmit=async ev=>{ ev.preventDefault();
+  const code=$('newCode').value.trim(); const name=$('newName').value.trim();
+  if(!/^\d{6}$/.test(code)){toast('代码须为 6 位数字','warn');return;}
+  const r=await api('/api/stocks',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({op:'add',code,name})});
+  toast(r.msg||'',r.ok?'':'err');
+  if(r.ok){$('newCode').value='';$('newName').value='';renderStocks(r.stocks);}
+};
+async function delStock(code){
+  if(!confirm(`确认从股票池删除 ${code}?`))return;
+  const r=await api('/api/stocks',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({op:'del',code})});
+  toast(r.msg||'',r.ok?'':'err');
+  if(r.ok)renderStocks(r.stocks);
+}
+
+/* ---------- 日志 tab 切换(股票池/交易流水常驻,不再互斥隐藏) ---------- */
+function setLog(pane){
+  state.activeLog=pane;
+  document.querySelectorAll('#logTabs button')
+    .forEach(b=>b.classList.toggle('active', b.dataset.pane===pane));
+  $('pane-logLoop').style.display=(pane==='logLoop')?'':'none';
+  $('pane-logModel').style.display=(pane==='logModel')?'':'none';
+}
+document.querySelectorAll('#logTabs button').forEach(b=>b.onclick=()=>setLog(b.dataset.pane));
+async function refreshTrades(){
+  const r=await api('/api/trades?n=40');
+  renderTrades(r.rows);
+}
+
+/* ---------- 主循环 ---------- */
+refreshStatus();
+refreshTrades();
+setInterval(refreshStatus,4000);
+setInterval(()=>{refreshLog('logLoop');},2500);
+setInterval(()=>{refreshLog('logModel');},4000);
+setInterval(refreshTrades,5000);
+
+/* ---------- 自愈:页面文件在磁盘上更新后自动重载(桌面窗口无需手动刷新/重启) ---------- */
+const _buildEl=$('build');
+const _build=_buildEl?_buildEl.getAttribute('content')||'':'';
+let _healing=false;
+async function selfHeal(){
+  if(_healing) return;
+  try{
+    const j=await api('/api/htmlver');
+    if(j && j.v && _build && j.v!==_build){
+      _healing=true;
+      toast('检测到界面更新,自动刷新…','warn');
+      setTimeout(()=>{ location.href=(location.href.split('?')[0])+'?t='+Date.now(); },400);
+    }
+  }catch(e){ /* 旧服务无该接口则忽略 */ }
+}
+selfHeal();
+setInterval(selfHeal,8000);
+</script>
+</body>
+</html>
