@@ -34,6 +34,12 @@
 > 之后一律用 `.venv/Scripts/python.exe run.py ...`(或把该 python 配到 IDE)。
 
 ## 三、使用
+### 1. 桌面原生应用程序 (推荐，双击即用)
+- **快捷方式**: 双击桌面上的 **「大模型量化交易」** 快捷方式即可直接启动。
+- **独立可执行程序**: 双击运行根目录下的 **`大模型量化交易.exe`** (或 `start_app.exe`)，无黑色命令行黑框闪烁，自带量化专属应用图标。
+- **源码与重编译**: 提供 `Launcher.cs` 与 `build_app.bat`，可一键通过 Windows 内置编译器重新构建 WinExe。
+
+### 2. 命令行与后台模式
 ```bash
 .venv/Scripts/python.exe run.py env              # 环境自检(GPU/模型/接口/股票池/MySQL)
 .venv/Scripts/python.exe run.py serve            # 前台起模型服务(可另开窗口)

@@ -104,8 +104,41 @@ def _acquire_single_instance() -> bool:
     return kernel32.GetLastError() != 183
 
 
+def _apply_window_icon(title: str = "大模型量化交易 · 模拟盘控制台") -> None:
+    """在后台尝试为已创建的原生窗口设置自定义图标。"""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        WM_SETICON = 0x0080
+        ICON_BIG = 1
+        ICON_SMALL = 0
+        IMAGE_ICON = 1
+        LR_LOADFROMFILE = 0x00000010
+        ico_path = os.path.join(config.BASE_DIR, "app.ico")
+        if not os.path.exists(ico_path):
+            return
+        hicon = user32.LoadImageW(None, ico_path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+        if not hicon:
+            return
+        for _ in range(40):
+            hwnd = user32.FindWindowW(None, title)
+            if hwnd:
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
+                break
+            time.sleep(0.1)
+    except Exception:
+        pass
+
+
 def main():
     import webview
+
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Antigravity.QuantTrading.DesktopApp.2.0")
+    except Exception:
+        pass
 
     if not _acquire_single_instance():
         _log("检测到已有 App 实例在运行,本次启动退出(避免重复开窗)")
@@ -120,6 +153,7 @@ def main():
     server, reused = _ensure_service()
     _log("打开桌面窗口 ...")
     try:
+        threading.Thread(target=_apply_window_icon, daemon=True).start()
         webview.create_window(
             "大模型量化交易 · 模拟盘控制台",
             _URL,
